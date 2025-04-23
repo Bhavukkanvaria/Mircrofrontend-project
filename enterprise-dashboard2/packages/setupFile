@@ -1,0 +1,596 @@
+<!-- https://chat.deepseek.com/a/chat/s/6e610ae4-35b0-471e-87e0-08b2fc3dae39 -->
+mkdir enterprise-dashboard2
+cd enterprise-dashboard2
+    nvm use v18.20.0
+    npm init -y
+    npm install -D concurrently wsrun
+
+mkdir packages
+<!-- packages we will create 4 micro-apps(host,analytics,shared,auth)
+first we will create redux store in host app, then move the store from host to shared app.
+that's why we first install @reduxjs/toolkit react-redux in host app then in shared app.
+-->
+
+<!--
+Remeber this 
+for eager Error add a new file called bootStrap and copy the index.tsx content in it.
+    then import the bootStrap in index.tsx like this
+        import("./bootStrap");  
+-->
+
+
+mkdir host
+cd host
+    nvm use v18.20.0
+    npm init -y
+    1) install dependecies
+        npm install react react-dom @reduxjs/toolkit react-redux
+        npm install -D webpack webpack-cli webpack-dev-server html-webpack-plugin babel-loader @babel/preset-react
+
+    2) Create host/public/index.html:
+        <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Host App</title>
+            </head>
+            <body>
+                <div id="root"></div>
+            </body>
+        </html>
+
+    3) Create host/src/index.jsx
+        import React from 'react';
+        import { createRoot } from 'react-dom/client';
+        import App from './App';
+
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<App />);
+
+        <!--
+        Remeber this
+        we will import store from shared lib later so that we will wrap the app using <Provider> with store value
+        -->
+    
+    4) Create host/src/App.jsx
+        import React from 'react';
+
+        const App = () => <h1>Host App Loaded!</h1>;
+        export default App;
+        
+    5) Create host/webpack.config.js;
+        const path = require('path');
+        const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+        module.exports = {
+            entry: './src/index.jsx',
+            <!-- output: {
+                filename: 'bundle.js',
+                path: path.resolve(__dirname, 'dist'),
+            }, -->
+            output: {
+                publicPath: 'auto',  // Critical for dynamic imports
+                uniqueName: 'host'   // Avoid webpack conflicts
+            },
+            mode: 'development',
+            devServer: {
+                port: 4000,
+                static: './dist',
+            },
+            module: {
+                rules: [
+                {
+                    test: /\.(ts|jsx)$/,
+                    exclude: /node_modules/,
+                    use: {
+                    loader: 'babel-loader',
+                    options: {
+                        presets: [
+                            '@babel/preset-react',
+                        ],
+                    },
+                    },
+                },
+                ],
+            },
+            resolve: {
+                extensions: ['.jsx', '.ts', '.js'],
+            },
+            plugins: [
+                new HtmlWebpackPlugin({
+                  template: './public/index.html',
+                }),
+            ],
+        };
+
+    6) Add scripts to host/package.json:
+        "scripts": {
+            "start": "webpack serve",
+            "build": "webpack"
+        }
+
+    7) Run the Host App:
+        npm start
+        Open http://localhost:4000 → Should show "Host App Loaded!"
+
+    8)  Now for Moudle fedration 
+    goto webpack.config.js of host
+        import below line
+    const {ModuleFederationPlugin} = require('webpack').container;
+    then
+    Edit host/webpack.config.js:
+        plugins: [
+            new HtmlWebpackPlugin({
+                template: './public/index.html',
+            }),
+            new ModuleFederationPlugin({
+                name: 'host',
+                remotes: {
+                  analytics: 'analytics@http://localhost:4001/remoteEntry.js', // Points to Analytics app
+                  shared: 'shared@http://localhost:4002/remoteEntry.js',
+                  auth: 'auth@http://localhost:4003/remoteEntry.js',
+                },
+                shared: {
+                  react: { singleton: true, requiredVersion: '^19.1.0' },
+                  'react-dom': { singleton: true, requiredVersion: '^19.1.0' },
+                  '@reduxjs/toolkit': { singleton: true, requiredVersion: '^2.6.1' },
+                  'react-redux': {
+                    singleton: true,
+                    requiredVersion: '^9.2.0',
+                    // eager: true  // Important for immediate loading 
+                  },
+                  '@enterprise-dashboard/shared': {
+                    singleton: true,
+                    requiredVersion: '^1.0.0'
+                  }
+                },
+              })
+        ],  
+
+
+    // Now setup Analytics App
+
+
+mkdir analytics
+cd analytics
+    nvm use v18.20.0
+    npm init -y
+    1) install dependecies
+        npm install react react-dom // no need to install @reduxjs/toolkit react-redux
+        // npm install react react-dom --save to show(react react-dom) in package.json 
+        npm install -D webpack webpack-cli webpack-dev-server html-webpack-plugin babel-loader @babel/preset-react
+
+    2) Create analytics/public/index.html:
+        <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Analytics App</title>
+            </head>
+            <body>
+                <div id="root"></div>
+            </body>
+        </html>
+
+    3) Create analytics/src/index.jsx
+        import React from 'react';
+        import { createRoot } from 'react-dom/client';
+        import App from './App';
+
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<App />);
+    
+    4) Create analytics/src/App.jsx
+        import React from 'react';
+
+        const App = () => <h1>Host App Loaded!</h1>;
+        export default App;
+        
+    5) Create analytics/webpack.config.js;
+        const path = require('path');
+        const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+        module.exports = {
+            entry: './src/index.jsx',
+            <!-- output: {
+                filename: 'bundle.js',
+                path: path.resolve(__dirname, 'dist'),
+            }, -->
+            output: {
+                publicPath: 'auto',  // Critical for dynamic imports
+                uniqueName: 'analytics'   // Avoid webpack conflicts
+            },
+            mode: 'development',
+            devServer: {
+                port: 4001,
+                static: './dist',
+            },
+            module: {
+                rules: [
+                {
+                    test: /\.(ts|jsx)$/,
+                    exclude: /node_modules/,
+                    use: {
+                    loader: 'babel-loader',
+                    options: {
+                        presets: [
+                            '@babel/preset-react',
+                        ],
+                    },
+                    },
+                },
+                ],
+            },
+            resolve: {
+                extensions: ['.jsx', '.ts', '.js'],
+            },
+            plugins: [
+                new HtmlWebpackPlugin({
+                template: './public/index.html',
+                }),
+            ],
+        };
+
+    6) Add scripts to host/package.json:
+        "scripts": {
+            "start": "webpack serve",
+            "build": "webpack"
+        }
+
+    7) Run the Analytics App:
+        npm start
+        Open http://localhost:4001 → Should show "Analytics App Loaded!"
+
+    8)  Now for Moudle fedration 
+    goto webpack.config.js of host
+        import below line
+    const {ModuleFederationPlugin} = require('webpack').container;
+    then
+    Edit host/webpack.config.js:
+        plugins: [
+            new HtmlWebpackPlugin({
+                template: './public/index.html',
+            }),
+            new ModuleFederationPlugin({
+                name: 'analytics',
+                filename: 'remoteEntry.js',
+                remotes: {
+                    shared: 'shared@http://localhost:4002/remoteEntry.js'
+                },
+                exposes: {
+                    './AnalyticsApp': './src/AnalyticsApp.jsx',
+                },
+                shared: {
+                    react: {
+                        singleton: true,
+                        requiredVersion: '^19.1.0',
+                        eager: false // MUST be false
+                    },
+                    'react-dom': {
+                        singleton: true,
+                        requiredVersion: '^19.1.0',
+                        eager: false
+                    },
+                    '@reduxjs/toolkit': { singleton: true, requiredVersion: '^2.6.1' },
+                    'react-redux': {
+                        singleton: true,
+                        requiredVersion: '^9.2.0',
+                        // eager: true  // Important for immediate loading 
+                    },
+                    '@enterprise-dashboard/shared': {
+                        singleton: true,
+                        requiredVersion: '^1.0.0'
+                    }
+                },
+            })
+        ],  
+
+
+// Now setup shared App
+
+mkdir shared
+cd shared
+    nvm use v18.20.0
+    npm init -y
+    1) install dependecies
+        npm install @reduxjs/toolkit react-redux
+    // As we will not test shared app as standalone , we will not create index.html and bootstap.js files
+
+    3) Create shared/src/index.jsx
+        export * from './store';
+        export * from './hooks';
+        export * from './slices';
+    
+    4) Create shared/src/store.js
+        import { configureStore } from '@reduxjs/toolkit';
+        import { authSlice, analyticsSlice } from './slices';
+        
+        export const store = configureStore({
+            reducer: {
+                auth: authSlice.reducer,
+                analytics: analyticsSlice.reducer
+            },
+        });
+
+    5) Create shared/src/hooks.js
+        import { useDispatch, useSelector } from 'react-redux';
+        export { useDispatch, useSelector };
+
+    6) Create shared/src/slices.js
+    import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+
+    export const authSlice = createSlice({
+        name: 'auth',
+        // initialState: { user: null },
+        initialState: {
+            user: null,
+            token: null,
+            role: 'guest' // 'admin' | 'user' | 'guest'
+        },
+        reducers: {
+            login: (state, action) => {
+                state.user = action.payload.user;
+                state.token = action.payload.token;
+                state.role = action.payload.role; // 'admin' | 'user
+            },
+            logout: (state, _action) => {
+                state.user = null;
+                state.token = null;
+                state.role = 'guest';
+            }
+        },
+    });
+
+    export const authSliceReducer = authSlice.reducer;
+    export const {login, logout} = authSlice.actions;
+
+    then create slice for analytics also
+
+        
+    7) Create shared/webpack.config.js;
+        const path = require('path');
+        const { ModuleFederationPlugin } = require('webpack').container;
+
+        module.exports = {
+            mode: 'development',
+            entry: './src/index.js',
+            output: {
+                path: path.resolve(__dirname, 'dist'),
+                filename: 'bundle.js',
+                library: { type: 'var', name: 'shared' },
+            },
+            devServer: {
+                port: 4002,
+                hot: true,
+            },
+            module: {
+                rules: [
+                    {
+                        test: /\.jsx?$/,
+                        exclude: /node_modules/,
+                        use: {
+                            loader: 'babel-loader',
+                            options: {
+                                presets: ['@babel/preset-react']
+                            }
+                        }
+                    }
+                ]
+            },
+            plugins: [
+                new ModuleFederationPlugin({
+                    name: 'shared',
+                    filename: 'remoteEntry.js',
+                    exposes: {
+                        './store': './src/store.js',
+                        './hooks': './src/hooks.js',
+                        './slices': './src/slices.js'
+                    },
+                    shared: {
+                        react: { singleton: true, requiredVersion: '^19.1.0' },
+                        'react-dom': { singleton: true, requiredVersion: '^19.1.0' },
+                        '@reduxjs/toolkit': { singleton: true, requiredVersion: '^2.6.1' },
+                        'react-redux': {
+                            singleton: true,
+                            requiredVersion: '^9.2.0',
+                            // eager: true  // Important for immediate loading 
+                        },
+                        '@enterprise-dashboard/shared': {
+                            singleton: true,
+                            requiredVersion: '^1.0.0'
+                        }
+                    },
+                })
+            ],
+
+        };
+
+    8) Add scripts to host/package.json:
+        "scripts": {
+            "start": "webpack serve",
+            "build": "webpack"
+        }
+
+    // No standalone App running
+    <!-- 7) Run the shared App:
+        npm start
+        Open http://localhost:4002 → Should show "Analytics App Loaded!" -->
+
+    9)  Now for Moudle fedration 
+        already updated webpack.config.js for module fedration in the 7th step.
+        
+
+
+
+// Now setup auth App
+
+mkdir auth
+cd auth
+    nvm use v18.20.0
+    npm init -y
+    1) install dependecies
+        npm install react react-dom
+        npm install -D webpack webpack-cli webpack-dev-server html-webpack-plugin babel-loader @babel/preset-react
+
+
+    <!--Remember this 
+        the shared package.json will look like this , please check the "name" of shared app (@enterprise-dashboard/shared)
+        {
+            "name": "@enterprise-dashboard/shared",
+            "version": "1.0.0",
+            "description": "",
+            "main": "dist/bundle.js",
+            "scripts": {
+                "start": "webpack serve --port 4002",
+                "build": "webpack --mode production"
+            },
+            "keywords": [],
+            "author": "",
+            "license": "ISC",
+            "dependencies": {
+                "react": "^19.1.0",
+                "react-dom": "^19.1.0",
+                "react-redux": "^9.2.0",
+                "@reduxjs/toolkit": "^2.6.1"
+            }
+            }
+
+     -->
+
+    2) Create auth/public/index.html:
+        <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Auth App</title>
+            </head>
+            <body>
+                <div id="root"></div>
+            </body>
+        </html>
+
+    <!--
+        Remeber this
+        we will import store from shared lib later so that we will wrap the app using <Provider> with store value
+            I am not sure do we need to wrap the auth app with <Provider> as we have already wrap the host app with 
+            <Provider> , and we are not wraping the ananlytics app with the <Provider> maybe because of standalone app.
+    -->
+    3) Create auth/src/index.jsx
+        import React from 'react';
+        import {createRoot} from 'react-dom/client';
+        import { App } from './App';
+        
+        import {Provider} from 'react-redux'
+        import {store} from 'shared/store';
+        
+        const container = document.getElementById('root');
+        
+        // const root = createRoot(container);
+        // root.render(<App />)
+        
+        const root = createRoot(document.getElementById('root'));
+        root.render(
+            <Provider store={store}>
+                <App />
+            </Provider>
+        )
+    
+    4) Create host/src/App.jsx
+        import React from 'react';
+
+        const App = () => <h1>Host App Loaded!</h1>;
+        export default App;
+        
+    5) Create host/webpack.config.js;
+        const path = require('path');
+        const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+        module.exports = {
+            entry: './src/index.jsx',
+            output: {
+                publicPath: 'auto',  // Critical for dynamic imports
+                uniqueName: 'host'   // Avoid webpack conflicts
+            },
+            mode: 'development',
+            devServer: {
+                port: 4003,
+                static: './dist',
+            },
+            module: {
+                rules: [
+                {
+                    test: /\.(ts|jsx)$/,
+                    exclude: /node_modules/,
+                    use: {
+                    loader: 'babel-loader',
+                    options: {
+                        presets: [
+                            '@babel/preset-react',
+                        ],
+                    },
+                    },
+                },
+                ],
+            },
+            resolve: {
+                extensions: ['.jsx', '.ts', '.js'],
+            },
+            plugins: [
+                new HtmlWebpackPlugin({
+                template: './public/index.html',
+                }),
+            ],
+        };
+
+    6) Add scripts to host/package.json:
+        "scripts": {
+            "start": "webpack serve",
+            "build": "webpack"
+        }
+
+    7) Run the Auth App:
+        npm start
+        Open http://localhost:4003 → Should show "Auth App Loaded!"
+
+    8)  Now for Moudle fedration 
+    goto webpack.config.js of host
+        import below line
+    const {ModuleFederationPlugin} = require('webpack').container;
+    then
+    Edit host/webpack.config.js:
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: './public/index.html',
+        }),
+        new ModuleFederationPlugin({
+            name: 'auth',
+            filename: 'remoteEntry.js',
+            remotes: {
+                shared: 'shared@http://localhost:4002/remoteEntry.js'
+            },
+            exposes: {
+                './AuthApp': './src/AuthApp.jsx',
+            },
+            shared: {
+                react: {
+                    singleton: true,
+                    requiredVersion: '^19.1.0',
+                    eager: false // MUST be false
+                },
+                'react-dom': {
+                    singleton: true,
+                    requiredVersion: '^19.1.0',
+                    eager: false
+                },
+                '@reduxjs/toolkit': { singleton: true, requiredVersion: '^2.6.1' },
+                'react-redux': {
+                    singleton: true,
+                    requiredVersion: '^9.2.0',
+                    // eager: true  // Important for immediate loading 
+                },
+                '@enterprise-dashboard/shared': {
+                    singleton: true,
+                    requiredVersion: '^1.0.0'
+                }
+            },
+        }),
+    ] 
